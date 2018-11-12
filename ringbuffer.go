@@ -1,10 +1,6 @@
 package ringbuffer
 
-import (
-  "io"
-)
-
-type ring struct {
+type Ring struct {
 	buffer []byte
 
 	rix   int
@@ -14,18 +10,21 @@ type ring struct {
 	wchan chan int
 }
 
-func Ring(s int, rs io.Reader) io.ReadWriter {
-	r := ring{
+func NewRing(t int) *Ring {
+	return NewRingSize(32<<10, t)
+}
+
+func NewRingSize(s, t int) *Ring {
+	r := Ring{
 		buffer: make([]byte, s),
 		rchan:  make(chan int),
 		wchan:  make(chan int),
 	}
-	go r.syncboth(s / 2)
-	go r.fill(rs)
+	go r.syncboth(t)
 	return &r
 }
 
-func (r *ring) Read(bs []byte) (int, error) {
+func (r *Ring) Read(bs []byte) (int, error) {
 	r.rchan <- len(bs)
 	<-r.rchan
 	n := copy(bs, r.buffer[r.rix:])
@@ -37,7 +36,7 @@ func (r *ring) Read(bs []byte) (int, error) {
 	return len(bs), nil
 }
 
-func (r *ring) Write(bs []byte) (int, error) {
+func (r *Ring) Write(bs []byte) (int, error) {
 	n := copy(r.buffer[r.wix:], bs)
 	if n < len(bs) {
 		r.wix = copy(r.buffer, bs[n:])
@@ -48,20 +47,12 @@ func (r *ring) Write(bs []byte) (int, error) {
 	return len(bs), nil
 }
 
-func (r *ring) fill(rs io.Reader) {
-  io.Copy(r, rs)
-}
-
-func (r *ring) syncboth(threshold int) {
+func (r *Ring) syncboth(threshold int) {
 	var available int
 	for {
 		select {
 		case n, _ := <-r.wchan:
 			available += n
-			for available < threshold {
-				nn := <-r.wchan
-				available += nn
-			}
 		case n, _ := <-r.rchan:
 			if n < available {
 				available -= n
@@ -70,10 +61,6 @@ func (r *ring) syncboth(threshold int) {
 			}
 			for nn := range r.wchan {
 				available += nn
-				for available < threshold {
-					nn := <-r.wchan
-					available += nn
-				}
 				if n < available {
 					available -= n
 					r.rchan <- n
