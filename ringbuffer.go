@@ -53,12 +53,12 @@ func (r *Ring) syncboth(threshold int) {
 		select {
 		case n := <-r.wchan:
 			available += n
-			for available < threshold {
+			for threshold > 0 && available <= threshold {
 				nn := <-r.wchan
 				available += nn
 			}
 		case n := <-r.rchan:
-			for available < n {
+			for available < n || (threshold > 0 && available <= threshold) {
 				nn := <-r.wchan
 				available += nn
 			}
