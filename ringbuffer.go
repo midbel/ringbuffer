@@ -49,6 +49,12 @@ func (r *Ring) Write(bs []byte) (int, error) {
 
 func (r *Ring) syncboth(threshold int) {
 	var available int
+	if threshold == 0 {
+		for available < len(r.buffer) /4 {
+			n := <- r.wchan
+			available += n
+		}
+	}
 	for {
 		select {
 		case n := <-r.wchan:
@@ -58,7 +64,7 @@ func (r *Ring) syncboth(threshold int) {
 				available += nn
 			}
 		case n := <-r.rchan:
-			for available < n || (threshold > 0 && available <= threshold) {
+			for available < n*8 || (threshold > 0 && available <= threshold) {
 				nn := <-r.wchan
 				available += nn
 			}
